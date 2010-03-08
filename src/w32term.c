@@ -4764,6 +4764,69 @@ w32_read_socket (sd, expected, hold_quit)
 	  check_visibility = 1;
 	  break;
 
+#ifdef USE_W32_IME
+	case WM_MULE_IME_STATUS:
+	  f = x_window_to_frame (dpyinfo, msg.msg.hwnd);
+
+	  if (f && !f->iconified && f->visible)
+	    {
+	      inev.kind = NON_ASCII_KEYSTROKE_EVENT;
+	      inev.code = VK_KANJI;
+	      inev.modifiers = 0;
+	      XSETFRAME (inev.frame_or_window, f);
+	      inev.timestamp = msg.msg.time;
+	    }
+	  break;
+
+	case WM_MULE_IME_REPORT:
+	  {
+#ifdef _UNICODE
+	    LPWSTR lpStr;
+#else
+	    LPSTR lpStr;
+#endif
+	    struct input_event buf;
+	    HANDLE hw32_ime_string = (HANDLE) msg.msg.wParam;
+
+	    f = (struct frame *) msg.msg.lParam;
+	    if (f && !f->iconified && f->visible)
+	      {
+#ifdef _UNICODE
+		lpStr = (LPWSTR) hw32_ime_string;
+#else
+		lpStr = (LPSTR) hw32_ime_string;
+#endif
+		while(lpStr)
+		  {
+		    EVENT_INIT (buf);
+		    XSETFRAME (buf.frame_or_window, f);
+		    buf.timestamp = msg.msg.time;
+		    buf.modifiers = 0;
+		    if (*lpStr)
+		      {
+			if (*lpStr < 0x80)
+			  buf.kind = ASCII_KEYSTROKE_EVENT;
+			else
+			  buf.kind = MULTIBYTE_CHAR_KEYSTROKE_EVENT;
+			buf.code = *lpStr;
+			kbd_buffer_store_event (&buf);
+			lpStr++;
+		      }
+		    else
+		      {
+			buf.kind = NON_ASCII_KEYSTROKE_EVENT;
+			buf.code = VK_COMPEND;
+			kbd_buffer_store_event (&buf);
+			break;
+		      }
+		  }
+		HeapFree (GetProcessHeap (), 0, (LPVOID) hw32_ime_string);
+	      }
+	  }
+	  break;
+
+#endif /* USE_W32_IME */
+
 	default:
 	  /* Check for messages registered at runtime.  */
 	  if (msg.msg.message == msh_mousewheel)
@@ -5128,6 +5191,13 @@ w32_draw_window_cursor (w, glyph_row, x, y, cursor_type, cursor_width, on_p, act
 	    = (WINDOW_TO_FRAME_PIXEL_Y (w, w->phys_cursor.y)
 	       + glyph_row->ascent - w->phys_cursor_ascent);
 
+#ifdef USE_W32_IME
+	  if (f == FRAME_W32_DISPLAY_INFO (f)->x_highlight_frame
+	      && !NILP (Fime_get_mode ()))
+	    PostMessage (hwnd,
+	    		 WM_MULE_IMM_SET_CONVERSION_WINDOW, (WPARAM) f, 0);
+#endif
+
 	  /* If the size of the active cursor changed, destroy the old
 	     system caret.  */
 	  if (w32_system_caret_hwnd
@@ -5322,21 +5392,6 @@ x_new_font (f, font_object, fontset)
 
   return font_object;
 }
-
-
-/***********************************************************************
-	TODO: W32 Input Methods
- ***********************************************************************/
-/* Listing missing functions from xterm.c helps diff stay in step.
-
-xim_destroy_callback (xim, client_data, call_data)
-xim_open_dpy (dpyinfo, resource_name)
-struct xim_inst_t
-xim_instantiate_callback (display, client_data, call_data)
-xim_initialize (dpyinfo, resource_name)
-xim_close_dpy (dpyinfo)
-
- */
 
 
 /* Calculate the absolute position in frame F
@@ -6438,6 +6493,9 @@ w32_initialize ()
     vertical_scroll_bar_top_border = vertical_scroll_bar_bottom_border
       = GetSystemMetrics (SM_CYVSCROLL);
   }
+#ifdef USE_W32_IME
+  w32_ime_control_init();
+#endif
 }
 
 void
