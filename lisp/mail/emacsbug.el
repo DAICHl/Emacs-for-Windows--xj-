@@ -49,6 +49,11 @@
   :group 'emacsbug
   :type 'string)
 
+(defcustom report-emacs-bug-win-x-address "emacs.win.xj.bug@gmail.com"
+  "Address for GNU Emacs Unofficial Windows version specific bugs."
+  :group 'emacsbug
+  :type 'string)
+
 (defcustom report-emacs-bug-no-confirmation nil
   "If non-nil, suppress the confirmations asked for the sake of novice users."
   :group 'emacsbug
@@ -87,10 +92,13 @@ Prompts for bug subject.  Leaves you in a mail buffer."
 				      "\\..*\\."
 				    "\\..*\\..*\\.")
 				  emacs-version))
+         (winx-version-p (eq system-type 'windows-nt))
 	 (from-buffer (current-buffer))
-	 (reporting-address (if pretest-p
-				report-emacs-bug-pretest-address
-			      report-emacs-bug-address))
+         (reporting-address (if winx-version-p
+                                report-emacs-bug-win-x-address
+                              (if pretest-p
+                                  report-emacs-bug-pretest-address
+                                report-emacs-bug-address)))
 	 ;; Put these properties on semantically-void text.
 	 (prompt-properties '(field emacsbug-prompt
 				    intangible but-helpful
@@ -123,11 +131,21 @@ Prompts for bug subject.  Leaves you in a mail buffer."
 	(put-text-property pos (point) 'face 'highlight))
       (insert " if possible, because the Emacs maintainers
 usually do not have translators to read other languages for them.\n\n")
-      (insert (format "Your bug report will be posted to the %s mailing list"
-		      reporting-address))
-      (if pretest-p
-	  (insert ".\n\n")
-	(insert ",\nand to the gnu.emacs.bug news group.\n\n")))
+      (if winx-version-p
+          (progn
+            (insert (format "Your bug report will be sent to [%s].\n"
+                            reporting-address))
+            (insert "Please make sure that the bug is ")
+            (let ((pos (point)))
+              (insert "specific to the Unofficial Windows version")
+              (put-text-property pos (point) 'face 'highlight))
+            (insert ".\nOther bugs should be sent to the place you are guided with\n"
+                    "M-x report-emacs-bug on some official ports such as X11 or NS.\n\n"))
+        (insert (format "Your bug report will be posted to the %s mailing list"
+                        reporting-address))
+        (if pretest-p
+            (insert ".\n\n")
+          (insert ",\nand to the gnu.emacs.bug news group.\n\n"))))
 
     (insert "Please describe exactly what actions triggered the bug\n"
 	    "and the precise symptoms of the bug:\n\n")
