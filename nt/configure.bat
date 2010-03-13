@@ -89,6 +89,7 @@ set userldflags=
 set doldflags=
 set sep1=
 set sep2=
+set usew32ime=
 
 rem ----------------------------------------------------------------------
 rem   Handle arguments.
@@ -110,6 +111,7 @@ if "%1" == "--without-gif" goto withoutgif
 if "%1" == "--without-tiff" goto withouttiff
 if "%1" == "--without-xpm" goto withoutxpm
 if "%1" == "--with-svg" goto withsvg
+if "%1" == "--enable-w32-ime" goto withime
 if "%1" == "" goto checkutils
 :usage
 echo Usage: configure [options]
@@ -129,6 +131,7 @@ echo.   --without-gif           do not use GIF library even if it is installed
 echo.   --without-tiff          do not use TIFF library even if it is installed
 echo.   --without-xpm           do not use XPM library even if it is installed
 echo.   --with-svg              use the RSVG library (experimental)
+echo.   --enable-w32-ime        build with w32 input method editor
 goto end
 rem ----------------------------------------------------------------------
 :setprefix
@@ -226,6 +229,14 @@ set svgsupport=Y
 goto again
 
 rem ----------------------------------------------------------------------
+
+:withime
+set usew32ime=Y
+set USE_W32_IME=Y
+shift
+goto again
+
+rem ----------------------------------------------------------------------
 rem    Check that necessary utilities (cp and rm) are present.
 :checkutils
 echo Checking for 'cp'...
@@ -234,7 +245,7 @@ if not exist junk.bat goto needcp
 echo Checking for 'rm'...
 rm junk.bat
 if exist junk.bat goto needrm
-goto checkcompiler
+goto checkversion
 :needcp
 echo You need 'cp' (the Unix file copy program) to build Emacs.
 goto end
@@ -242,6 +253,41 @@ goto end
 del junk.bat
 echo You need 'rm' (the Unix file delete program) to build Emacs.
 goto end
+
+rem ----------------------------------------------------------------------
+rem   Check for Windows Version.
+rem   _WIN32_WINDOWS and _WIN32_WINNT are automatically defined by WINVER.
+
+:checkversion
+echo Checking for Windows Version ...
+
+%COMSPEC% /q /c ver > junk.txt
+
+%COMSPEC% /c findstr "6.0.6000" junk.txt > NUL
+if %errorlevel%==0 goto VISTA
+
+%COMSPEC% /c findstr "XP" junk.txt > NUL
+if %errorlevel%==0 goto WXP
+
+%COMSPEC% /c findstr "2000" junk.txt > NUL
+if %errorlevel%==0 goto W2K
+
+if %errorlevel%==1 goto WNT
+
+:VISTA
+set usercflags=%usercflags%%sep1%-DWINVER=0x0600
+goto ver_end
+:WXP
+set usercflags=%usercflags%%sep1%-DWINVER=0x0501
+goto ver_end
+:W2k
+set usercflags=%usercflags%%sep1%-DWINVER=0x0500
+goto ver_end
+:WNT
+set usercflags=%usercflags%%sep1%-DWINVER=0x0400
+goto ver_end
+:ver_end
+rm -f junk.txt
 
 rem ----------------------------------------------------------------------
 rem   Auto-detect compiler if not specified, and validate GCC if chosen.
@@ -514,6 +560,32 @@ set HAVE_RSVG=1
 rm -f junk.c junk.obj junk.err junk.out
 
 rem ----------------------------------------------------------------------
+rem check for RECONVERTSTRING
+rem
+
+echo checking for RECONVERTSTRING...
+
+echo #include "windows.h" >junk.c
+echo #include "imm.h" >>junk.c
+echo main(){RECONVERTSTRING x;} >>junk.c
+
+%COMPILER% %usercflags% %mingwflag% -c junk.c -o junk.obj  >>config.log 2>&1
+if exist junk.obj goto haveReconvertstring
+
+echo ...RECONVERTSTRING isn't defined.
+echo The failed program was: >>config.log
+type junk.c >>config.log
+set HAVE_RECONVERTSTRING=
+goto recoverstringDone
+
+:haveReconvertstring
+echo ...RECONVERTSTRING is defined.
+set HAVE_RECONVERTSTRING=1
+
+:recoverstringDone
+rm -f junk.c junk.obj
+
+rem ----------------------------------------------------------------------
 :genmakefiles
 echo Generating makefiles
 if %COMPILER% == gcc set MAKECMD=gmake
@@ -538,6 +610,7 @@ for %%v in (%usercflags%) do if not (%%v)==() set docflags=Y
 if (%docflags%)==(Y) echo USER_CFLAGS=%usercflags%>>config.settings
 for %%v in (%userldflags%) do if not (%%v)==() set doldflags=Y
 if (%doldflags%)==(Y) echo USER_LDFLAGS=%userldflags%>>config.settings
+if (%usew32ime%) == (Y) echo USE_W32_IME=1 >>config.settings
 echo # End of settings from configure.bat>>config.settings
 echo. >>config.settings
 
@@ -552,6 +625,8 @@ if not "(%HAVE_GIF%)" == "()" echo #define HAVE_GIF 1 >>config.tmp
 if not "(%HAVE_TIFF%)" == "()" echo #define HAVE_TIFF 1 >>config.tmp
 if not "(%HAVE_XPM%)" == "()" echo #define HAVE_XPM 1 >>config.tmp
 if "(%HAVE_RSVG%)" == "(1)" echo #define HAVE_RSVG 1 >>config.tmp
+if not "(%USE_W32_IME%)" == "()" echo #define USE_W32_IME 1 >>config.tmp
+if not "(%HAVE_RECONVERTSTRING%)" == "()" echo #define HAVE_RECONVERTSTRING 1 >>config.tmp
 
 echo /* End of settings from configure.bat.  */ >>config.tmp
 

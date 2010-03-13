@@ -579,6 +579,8 @@ do { \
 #endif /* WM_MOUSEHWHEEL  */
 #ifndef WM_APPCOMMAND
 #define WM_APPCOMMAND 0x319
+#endif
+#ifndef GET_APPCOMMAND_LPARAM
 #define GET_APPCOMMAND_LPARAM(lParam)  (HIWORD(lParam) & 0x7fff)
 #endif
 #ifndef WM_UNICHAR 
@@ -611,6 +613,96 @@ do { \
 #define WM_EMACS_SETCURSOR             (WM_EMACS_START + 19)
 #define WM_EMACS_PAINT                 (WM_EMACS_START + 20)
 #define WM_EMACS_END                   (WM_EMACS_START + 21)
+
+#ifdef USE_W32_IME
+#ifndef VK_KANJI
+#define VK_KANJI 0x19
+#endif
+#ifndef VK_KANA
+#define VK_KANA  0x15
+#endif
+#define VK_COMPEND 0x1A
+
+#ifdef RECONVERSION
+#ifndef WM_IME_REQUEST
+#define WM_IME_REQUEST                  0x288
+#endif
+#ifndef IMR_COMPOSITIONWINDOW
+#define IMR_COMPOSITIONWINDOW           0x0001
+#endif
+#ifndef IMR_CANDIDATEWINDOW
+#define IMR_CANDIDATEWINDOW             0x0002
+#endif
+#ifdef IMR_COMPOSITIONFONT
+#define IMR_COMPOSITIONFONT             0x0003
+#endif
+#ifndef IMR_RECONVERTSTRING
+#define IMR_RECONVERTSTRING             0x0004
+#endif
+#ifndef IMR_CONFIRMRECONVERTSTRING
+#define IMR_CONFIRMRECONVERTSTRING      0x0005
+#endif
+#endif
+
+/* For internal communications
+   from window procedure to event loop. */
+#define WM_MULE_IME_REPORT         (WM_USER+2200)
+#define WM_MULE_IME_STATUS         (WM_USER+2201)
+
+/* For internal communications
+   from main thread to window procedure. */
+#define WM_MULE_IMM_MESSAGE_START             (WM_USER+2300)
+#define WM_MULE_IMM_SET_STATUS                (WM_USER+2300)
+#define WM_MULE_IMM_GET_STATUS                (WM_USER+2301)
+#if 0
+#define WM_MULE_IMM_DEAL_WITH_CONTEXT         (WM_USER+2302)
+#define WM_MULE_IMM_SET_COMPOSITION_STRING    (WM_USER+2303)
+#endif
+#define WM_MULE_IMM_GET_COMPOSITION_STRING    (WM_USER+2304)
+#define WM_MULE_IMM_SET_MODE                  (WM_USER+2305)
+#if 0
+#define WM_MULE_IMM_NOTIFY                    (WM_USER+2310)
+#define WM_MULE_IMM_GET_UNDETERMINED_STRING_LENGTH (WM_USER+2320)
+#endif
+#define WM_MULE_IMM_MESSAGE_END               (WM_USER+2399)
+#define MESSAGE_IMM_COM_P(message)              \
+  (((message) >= WM_MULE_IMM_MESSAGE_START) &&  \
+   ((message) <= WM_MULE_IMM_MESSAGE_END))
+
+#if 0
+/* For synchronization
+   to create conversion agent
+   between main thread and event loop. */
+#define WM_MULE_IME_CREATE_AGENT        (WM_USER+2400)
+#define WM_MULE_IME_CREATE_AGENT_REPLY  (WM_USER+2401)
+#define WM_MULE_IME_DESTROY_AGENT       (WM_USER+2402)
+#define WM_MULE_IME_DESTROY_AGENT_REPLY (WM_USER+2403)
+#endif
+#define CONVAGENT_CLASS "ConvAgent"
+
+#define WM_MULE_IMM_SET_CONVERSION_WINDOW      (WM_USER+2404)
+
+#ifdef RECONVERSION
+#ifndef HAVE_RECONVERTSTRING
+typedef struct tagRECONVERTSTRING {
+  DWORD dwSize;
+  DWORD dwVersion;
+  DWORD dwStrLen;
+  DWORD dwStrOffset;
+  DWORD dwCompStrLen;
+  DWORD dwCompStrOffset;
+  DWORD dwTargetStrLen;
+  DWORD dwTargetStrOffset;
+} RECONVERTSTRING, *PRECONVERTSTRING;
+#endif
+#ifndef SCS_SETRECONVERTSTRING
+#define SCS_SETRECONVERTSTRING 0x00010000
+#endif
+#ifndef SCS_QUERYRECONVERTSTRING
+#define SCS_QUERYRECONVERTSTRING 0x00020000
+#endif
+#endif /* RECONVERSION */
+#endif /* USE_W32_IME */
 
 #define WND_FONTWIDTH_INDEX    (0)
 #define WND_LINEHEIGHT_INDEX   (4)

@@ -970,7 +970,7 @@ init_user_info ()
 		 Otherwise, the default group name was already set to
 		 "None" in globals_of_w32.  */
 	      if (lookup_account_sid (NULL, group_token.PrimaryGroup,
-				      gname, &glength, NULL, &dlength,
+				      gname, &glength, domain, &dlength,
 				      &user_type))
 		strcpy (dflt_group_name, gname);
 	    }
@@ -3982,7 +3982,7 @@ system_process_attributes (pid)
 		      dlength = sizeof (domain);
 		      result =
 			lookup_account_sid (NULL, group_token.PrimaryGroup,
-					    gname, &glength, NULL, &dlength,
+					    gname, &glength, domain, &dlength,
 					    &user_type);
 		      if (result)
 			w32_add_to_cache (group_token.PrimaryGroup,
@@ -5500,18 +5500,18 @@ check_windows_init_file ()
 				 + strlen (load_path));
 
 	  sprintf (buffer,
-		   "The Emacs Windows initialization file \"%s.el\" "
-		   "could not be found in your Emacs installation.  "
-		   "Emacs checked the following directories for this file:\n"
-		   "\n%s\n\n"
-		   "When Emacs cannot find this file, it usually means that it "
-		   "was not installed properly, or its distribution file was "
-		   "not unpacked properly.\nSee the README.W32 file in the "
-		   "top-level Emacs directory for more information.",
+		   TEXT ("The Emacs Windows initialization file \"%s.el\" "
+			 "could not be found in your Emacs installation.  "
+			 "Emacs checked the following directories for this file:\n"
+			 "\n%s\n\n"
+			 "When Emacs cannot find this file, it usually means that it "
+			 "was not installed properly, or its distribution file was "
+			 "not unpacked properly.\nSee the README.W32 file in the "
+			 "top-level Emacs directory for more information."),
 		   init_file_name, load_path);
 	  MessageBox (NULL,
 		      buffer,
-		      "Emacs Abort Dialog",
+		      TEXT ("Emacs Abort Dialog"),
 		      MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
       /* Use the low-level Emacs abort. */
 #undef abort
