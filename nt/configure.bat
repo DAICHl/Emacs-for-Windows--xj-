@@ -263,6 +263,9 @@ echo Checking for Windows Version ...
 
 %COMSPEC% /q /c ver > junk.txt
 
+%COMSPEC% /c findstr "6.1.7600" junk.txt > NUL
+if %errorlevel%==0 goto W7
+
 %COMSPEC% /c findstr "6.0.6000" junk.txt > NUL
 if %errorlevel%==0 goto VISTA
 
@@ -274,6 +277,9 @@ if %errorlevel%==0 goto W2K
 
 if %errorlevel%==1 goto WNT
 
+:W7
+set usercflags=%usercflags%%sep1%-DWINVER=0x0601
+goto ver_end
 :VISTA
 set usercflags=%usercflags%%sep1%-DWINVER=0x0600
 goto ver_end
