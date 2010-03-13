@@ -77,11 +77,6 @@ extern void w32_menu_display_help P_ ((HWND, HMENU, UINT, UINT));
 extern void w32_free_menu_strings P_ ((HWND));
 extern const char *map_w32_filename P_ ((const char *, const char **));
 
-#if defined (RECONVERSION) && defined (USE_W32_IME)
-extern LRESULT w32_get_ime_reconversion_length ();
-extern BOOL w32_get_ime_reconversion_string (HWND, WPARAM, RECONVERTSTRING*);
-#endif
-
 extern int quit_char;
 
 extern char *lispy_function_keys[];
@@ -200,41 +195,6 @@ static int w32_strict_painting;
 Lisp_Object Qnone;
 Lisp_Object Qsuppress_icon;
 Lisp_Object Qundefined_color;
-
-#ifdef USE_W32_IME
-static int IME_event_off_count;
-
-const char * const ImmGetOpenStatus_Name = "ImmGetOpenStatus";
-const char * const ImmSetOpenStatus_Name = "ImmSetOpenStatus";
-const char * const ImmSetCompositionWindow_Name = "ImmSetCompositionWindow";
-const char * const ImmGetContext_Name = "ImmGetContext";
-const char * const ImmGetConversionStatus_Name = "ImmGetConversionStatus";
-const char * const ImmSetConversionStatus_Name = "ImmSetConversionStatus";
-const char * const ImmNotifyIME_Name = "ImmNotifyIME";
-const char * const ImmReleaseContext_Name = "ImmReleaseContext";
-const char * const ImmCreateContext_Name = "ImmCreateContext";
-const char * const ImmDestroyContext_Name = "ImmDestroyContext";
-const char * const ImmAssociateContext_Name = "ImmAssociateContext";
-const char * const ImmGetHotKey_Name = "ImmGetHotKey";
-#ifdef _UNICODE
-const char * const ImmGetCompositionString_Name = "ImmGetCompositionStringW";
-const char * const ImmSetCompositionString_Name = "ImmSetCompositionStringW";
-const char * const ImmSetCompositionFont_Name = "ImmSetCompositionFontW";
-const char * const ImmGetConversionList_Name = "ImmGetConversionListW";
-const char * const ImmConfigureIME_Name = "ImmConfigureIMEW";
-const char * const ImmGetCandidateList_Name = "ImmGetCandidateListW";
-const char * const ImmGetCandidateListCount_Name = "ImmGetCandidateListCountA";
-#else
-const char * const ImmGetCompositionString_Name = "ImmGetCompositionStringA";
-const char * const ImmSetCompositionString_Name = "ImmSetCompositionStringA";
-const char * const ImmSetCompositionFont_Name = "ImmSetCompositionFontA";
-const char * const ImmGetConversionList_Name = "ImmGetConversionListA";
-const char * const ImmConfigureIME_Name = "ImmConfigureIMEA";
-const char * const ImmGetCandidateList_Name = "ImmGetCandidateListA";
-const char * const ImmGetCandidateListCount_Name = "ImmGetCandidateListCountA";
-#endif
-#endif
-
 Lisp_Object Qcancel_timer;
 Lisp_Object Qfont_param;
 Lisp_Object Qhyper;
@@ -289,24 +249,17 @@ DECLARE_HANDLE(HMONITOR);
 
 typedef BOOL (WINAPI * TrackMouseEvent_Proc)
   (IN OUT LPTRACKMOUSEEVENT lpEventTrack);
-#ifndef USE_W32_IME
 typedef LONG (WINAPI * ImmGetCompositionString_Proc)
   (IN HIMC context, IN DWORD index, OUT LPVOID buffer, IN DWORD bufLen);
 typedef HIMC (WINAPI * ImmGetContext_Proc) (IN HWND window);
-#endif
-
 typedef HMONITOR (WINAPI * MonitorFromPoint_Proc) (IN POINT pt, IN DWORD flags);
 typedef BOOL (WINAPI * GetMonitorInfo_Proc)
   (IN HMONITOR monitor, OUT struct MONITOR_INFO* info);
 
 TrackMouseEvent_Proc track_mouse_event_fn = NULL;
 ClipboardSequence_Proc clipboard_sequence_fn = NULL;
-
-#ifndef USE_W32_IME
 ImmGetCompositionString_Proc get_composition_string_fn = NULL;
 ImmGetContext_Proc get_ime_context_fn = NULL;
-#endif
-
 MonitorFromPoint_Proc monitor_from_point_fn = NULL;
 GetMonitorInfo_Proc get_monitor_info_fn = NULL;
 
@@ -479,17 +432,7 @@ void x_set_title P_ ((struct frame *, Lisp_Object, Lisp_Object));
 void x_set_tool_bar_lines P_ ((struct frame *, Lisp_Object, Lisp_Object));
 static void x_edge_detection P_ ((struct frame *, struct image *, Lisp_Object,
 				  Lisp_Object));
-#ifdef USE_W32_IME
-static void w32_set_ime_conv_window P_ ((HWND, struct frame *));
-static void w32_set_ime_status P_ ((HWND, int));
-static int w32_get_ime_status P_ ((HWND));
-static int w32_set_ime_mode P_ ((HWND, int, int));
-void w32_ime_control_init P_ ((void));
-static void w32_set_ime_font P_ ((HWND, LPLOGFONT));
-static BOOL w32_get_ime_composition_string P_ ((HWND));
-static LRESULT CALLBACK conversion_agent_wndproc P_ ((HWND, UINT, WPARAM, LPARAM));
-static int initialize_conversion_agent P_ (());
-#endif
+
 
 
 
@@ -2001,14 +1944,14 @@ void x_set_scroll_bar_default_width (f)
 Cursor
 w32_load_cursor (LPCTSTR name)
 {
-  /* Try first to load a shared predefined cursor.  */
-  Cursor cursor = LoadImage (NULL, name, IMAGE_CURSOR, 0, 0,
-			  LR_DEFAULTCOLOR | LR_DEFAULTSIZE | LR_SHARED);
- if (!cursor)
+  /* Try first to load cursor from application resource.  */
+  Cursor cursor = LoadImage ((HINSTANCE) GetModuleHandle (NULL),
+			     name, IMAGE_CURSOR, 0, 0,
+			     LR_DEFAULTCOLOR | LR_DEFAULTSIZE | LR_SHARED);
+  if (!cursor)
     {
-      /* Then try to load cursor from application resource.  */
-      cursor = LoadImage ((HINSTANCE) GetModuleHandle (NULL),
-			  name, IMAGE_CURSOR, 0, 0,
+      /* Then try to load a shared predefined cursor.  */
+      cursor = LoadImage (NULL, name, IMAGE_CURSOR, 0, 0,
 			  LR_DEFAULTCOLOR | LR_DEFAULTSIZE | LR_SHARED);
     }
   return cursor;
@@ -3172,7 +3115,7 @@ w32_wnd_proc (hwnd, msg, wParam, lParam)
       post_character_message (hwnd, msg, wParam, lParam,
 			      w32_get_key_modifiers (wParam, lParam));
       break;
-#ifndef USE_W32_IME
+
     case WM_UNICHAR:
       /* WM_UNICHAR looks promising from the docs, but the exact
          circumstances in which TranslateMessage sends it is one of those
@@ -3229,7 +3172,6 @@ w32_wnd_proc (hwnd, msg, wParam, lParam)
 	ignore_ime_char--;
 
       break;
-#endif
 
     case WM_IME_ENDCOMPOSITION:
       ignore_ime_char = 0;
@@ -4000,88 +3942,8 @@ w32_wnd_proc (hwnd, msg, wParam, lParam)
 
 	return retval;
       }
-#ifdef USE_W32_IME
-    case WM_IME_NOTIFY:
-      if (wParam == IMN_SETOPENSTATUS)
-	{
-	  if (!IME_event_off_count)
-	    my_post_msg (&wmsg, hwnd, WM_MULE_IME_STATUS, 0, 0);
-	  else
-	    IME_event_off_count--;
-	}
-      goto dflt;
-
-    case WM_IME_STARTCOMPOSITION:
-      if (!ignore_ime_char)
-      	{
-	  HDC hdc;
-	  LOGFONT lf;
-	  struct frame *f;
-	  HFONT ime_font, old_font;
-	  
-	  f = x_window_to_frame (dpyinfo, hwnd);
-	  hdc = GetDC (hwnd);
-
-	  ime_font = GetCurrentObject (hdc, OBJ_FONT);
-	  GetObject (ime_font, sizeof (lf), &lf);
-	  ime_font = CreateFontIndirect (&lf);
-
-	  lf.lfHeight = FRAME_FONT (f)->pixel_size;
-	  lf.lfWidth = 0;
-	  lf.lfCharSet = GetTextCharset (hdc);
-	  if (FRAME_FONT (f)->props[FONT_SPACING_INDEX] == FONT_SPACING_PROPORTIONAL)
-	    lf.lfPitchAndFamily = VARIABLE_PITCH | FF_DONTCARE;
-	  else
-	    lf.lfPitchAndFamily = FIXED_PITCH | FF_DONTCARE;
-
-      	  w32_set_ime_font (hwnd, &lf);
-	  w32_set_ime_conv_window (hwnd, f);
-      	  ignore_ime_char = 1;
-
-	  old_font = SelectObject (hdc, ime_font);
-	  SelectObject (hdc, old_font);
-	  DeleteObject (ime_font);
-	  ReleaseDC (FRAME_W32_WINDOW (f), hdc);
-      	}
-      goto dflt;
-
-    case WM_IME_COMPOSITION:
-      {
-	if (lParam & GCS_RESULTSTR)
-	  {
-	    if (w32_get_ime_composition_string (hwnd))
-	      return 0;
-	    else
-	      break;
-	}
-	goto dflt;
-      }
-
-  case WM_MULE_IMM_SET_CONVERSION_WINDOW:
-    w32_set_ime_conv_window (hwnd, (struct frame *) wParam);
-    break;
-
-#ifdef RECONVERSION
-    case WM_IME_REQUEST:
-      if (wParam == IMR_RECONVERTSTRING)
-	if (lParam)
-	  return w32_get_ime_reconversion_string (hwnd, wParam,
-						  (RECONVERTSTRING*) lParam);
-	else
-	  return w32_get_ime_reconversion_length ();
-      goto dflt;
-#endif
-#endif /* USE_W32_IME */
 
     default:
-
-#ifdef USE_W32_IME
-      {
-	if (MESSAGE_IMM_COM_P(msg))
-	  return conversion_agent_wndproc (hwnd, msg, wParam, lParam);
-      }
-#endif
-
       /* Check for messages registered at runtime. */
       if (msg == msh_mousewheel)
 	{
@@ -6355,834 +6217,6 @@ DEFUN ("system-move-file-to-trash", Fsystem_move_file_to_trash,
 
 
 /***********************************************************************
-			  Input Method Editor
- ***********************************************************************/
-#ifdef USE_W32_IME
-#define MAX_CONVAGENT 100
-
-typedef struct conversion_agent {
-  HIMC himc;
-  HWND hwnd;
-} conversion_agent;
-
-static conversion_agent agent[MAX_CONVAGENT];
-static int conversion_agent_num = -1;
-
-BOOL fIME = FALSE;
-
-typedef BOOL (WINAPI *IMMGETOPENSTATUSPROC)(HIMC);
-IMMGETOPENSTATUSPROC ImmGetOpenStatusProc;
-
-typedef BOOL (WINAPI *IMMSETOPENSTATUSPROC)(HIMC, BOOL);
-IMMSETOPENSTATUSPROC ImmSetOpenStatusProc;
-
-typedef BOOL (WINAPI *IMMSETCOMPOSITIONWINDOWPROC)(HIMC, LPCOMPOSITIONFORM);
-IMMSETCOMPOSITIONWINDOWPROC ImmSetCompositionWindowProc;
-
-typedef LONG (WINAPI *IMMGETCOMPOSITIONSTRINGPROC)
-  (HIMC, DWORD, LPVOID, DWORD);
-IMMGETCOMPOSITIONSTRINGPROC ImmGetCompositionStringProc;
-
-typedef LONG (WINAPI *IMMSETCOMPOSITIONSTRINGPROC)
-  (HIMC, DWORD, LPCVOID, DWORD, LPCVOID, DWORD);
-IMMSETCOMPOSITIONSTRINGPROC ImmSetCompositionStringProc;
-
-typedef BOOL (WINAPI *IMMSETCOMPOSITIONFONTPROC) (HIMC, LPLOGFONTA);
-IMMSETCOMPOSITIONFONTPROC ImmSetCompositionFontProc;
-
-typedef HIMC (WINAPI *IMMGETCONTEXTPROC)(HWND);
-IMMGETCONTEXTPROC ImmGetContextProc;
-
-typedef BOOL (WINAPI *IMMGETCONVERSIONSTATUSPROC)(HIMC, LPDWORD, LPDWORD);
-IMMGETCONVERSIONSTATUSPROC ImmGetConversionStatusProc;
-
-typedef BOOL (WINAPI *IMMSETCONVERSIONSTATUSPROC)(HIMC, DWORD, DWORD);
-IMMSETCONVERSIONSTATUSPROC ImmSetConversionStatusProc;
-
-typedef BOOL (WINAPI *IMMGETCONVERSIONLISTPROC)
-  (HKL, HIMC, LPCTSTR, LPCANDIDATELIST, DWORD, UINT);
-IMMGETCONVERSIONLISTPROC ImmGetConversionListProc;
-
-typedef BOOL (WINAPI *IMMCONFIGUREIMEPROC)(HKL, HWND, DWORD, LPVOID);
-IMMCONFIGUREIMEPROC ImmConfigureIMEProc;
-
-typedef BOOL (WINAPI *IMMNOTIFYIMEPROC)(HIMC, DWORD, DWORD, DWORD);
-IMMNOTIFYIMEPROC ImmNotifyIMEProc;
-
-typedef BOOL (WINAPI *IMMRELEASECONTEXTPROC)(HWND, HIMC);
-IMMRELEASECONTEXTPROC ImmReleaseContextProc;
-
-typedef HIMC (WINAPI *IMMCREATECONTEXTPROC)(void);
-IMMCREATECONTEXTPROC ImmCreateContextProc;
-
-typedef BOOL (WINAPI *IMMDESTROYCONTEXTPROC)(HIMC);
-IMMDESTROYCONTEXTPROC ImmDestroyContextProc;
-
-typedef BOOL (WINAPI *IMMASSOCIATECONTEXTPROC) (HWND, HIMC);
-IMMASSOCIATECONTEXTPROC ImmAssociateContextProc;
-
-typedef BOOL (WINAPI *IMMGETCANDIDATELISTPROC)
-  (HIMC, DWORD, LPCANDIDATELIST, DWORD);
-IMMGETCANDIDATELISTPROC ImmGetCandidateListProc;
-
-typedef BOOL (WINAPI *IMMGETCANDIDATELISTCOUNTPROC) (HIMC, LPDWORD);
-IMMGETCANDIDATELISTCOUNTPROC ImmGetCandidateListCountProc;
-
-typedef BOOL (WINAPI *IMMGETHOTKEYPROC)(DWORD, LPUINT, LPUINT, LPHKL);
-IMMGETHOTKEYPROC ImmGetHotKeyProc;
-
-Lisp_Object Vime_control;
-
-static void
-w32_set_ime_conv_window (hwnd, f)
-     HWND hwnd;
-     struct frame *f;
-{
-  if (fIME && !NILP (Vime_control))
-    {
-      HIMC himc;
-      COMPOSITIONFORM compform;
-      struct window *w = XWINDOW (FRAME_SELECTED_WINDOW (f));
-
-      himc = (ImmGetContextProc) (hwnd);
-      compform.dwStyle = CFS_RECT;
-
-      compform.ptCurrentPos.x =	WINDOW_TEXT_TO_FRAME_PIXEL_X (w, w->phys_cursor.x);
-
-      compform.ptCurrentPos.y = WINDOW_TO_FRAME_PIXEL_Y (w, w->phys_cursor.y);
-#if 0
-      if (FRAME_FONT (f)->vertical_centering == 1)
-	compform.ptCurrentPos.y += FRAME_FONT (f)->baseline_offset;
-#endif
-      compform.rcArea.left = (WINDOW_BOX_LEFT_EDGE_X (w)
-			      + WINDOW_LEFT_MARGIN_WIDTH (w)
-			      + WINDOW_LEFT_FRINGE_WIDTH (w));
-
-      compform.rcArea.top = (WINDOW_TOP_EDGE_Y (w)
-			     + WINDOW_HEADER_LINE_HEIGHT (w));
-
-      compform.rcArea.right = (WINDOW_BOX_RIGHT_EDGE_X (w)
-			       - WINDOW_RIGHT_MARGIN_WIDTH (w)
-			       - WINDOW_RIGHT_FRINGE_WIDTH (w));
-
-      compform.rcArea.bottom = (WINDOW_BOTTOM_EDGE_Y (w)
-				- WINDOW_MODE_LINE_HEIGHT (w));
-      
-      (ImmSetCompositionWindowProc) (himc, &compform);
-      (ImmReleaseContextProc) (hwnd, himc);
-    }
-}
-
-static void
-w32_set_ime_status (hwnd, openp)
-     HWND hwnd;
-     int openp;
-{
-  HIMC himc;
-
-  himc = (ImmGetContextProc) (hwnd);
-  (ImmSetOpenStatusProc) (himc, openp);
-  (ImmReleaseContextProc) (hwnd, himc);
-}
-
-static int
-w32_get_ime_status (hwnd)
-     HWND hwnd;
-{
-  HIMC himc;
-  int ret;
-
-  himc = (ImmGetContextProc) (hwnd);
-  ret = (ImmGetOpenStatusProc) (himc);
-  (ImmReleaseContextProc) (hwnd, himc);
-
-  return ret;
-}
-
-static int
-w32_set_ime_mode (hwnd, mode, mask)
-     HWND hwnd;
-     int mode;
-     int mask;
-{
-  HIMC himc;
-  DWORD cmode, smode;
-
-  himc = (ImmGetContextProc) (hwnd);
-  if (!(ImmGetConversionStatusProc) (himc, &cmode, &smode))
-    return 0;
-
-  cmode = (cmode & (~mask)) | (mode & mask);
-
-  (ImmSetConversionStatusProc) (himc, cmode, smode);
-  (ImmReleaseContextProc) (hwnd, himc);
-
-  return 1;
-}
-
-static BOOL
-w32_get_ime_composition_string (hwnd)
-     HWND hwnd;
-{
-  HIMC hIMC;
-  int size;
-  HANDLE himestr;
-#ifdef _UNICODE
-  LPWSTR lpstr;
-#else
-  LPSTR lpstr;
-#endif
-
-  struct frame *f;
-
-  hIMC = (ImmGetContextProc) (hwnd);
-  if (!hIMC)
-    return FALSE;
-
-  size = (ImmGetCompositionStringProc) (hIMC, GCS_RESULTSTR, NULL, 0);
-#ifdef _UNICODE
-  size += sizeof (WCHAR);
-#else
-  size += sizeof (CHAR);
-#endif
-  himestr = HeapAlloc (GetProcessHeap (), HEAP_ZERO_MEMORY, size);
-  if (!himestr)
-    abort ();
-
-  (ImmGetCompositionStringProc) (hIMC, GCS_RESULTSTR, himestr, size);
-  (ImmReleaseContextProc) (hwnd, hIMC);
-  {
-    W32Msg wmsg;
-    f = SELECTED_FRAME ();
-    my_post_msg (&wmsg, hwnd, WM_MULE_IME_REPORT,
-		 (WPARAM) himestr, (LPARAM) f);
-  }
-  return TRUE;
-}
-
-#ifdef RECONVERSION
-LRESULT
-w32_get_ime_reconversion_length ()
-{
-  int len, pt, pt_byte, start, end;
-  Lisp_Object str, point;
-  LRESULT lResult = 0;
-#ifdef _UNICODE
-  int pos;
-  WCHAR *uc_code, *s;
-#else
-  struct coding_system coding;
-#endif
-
-  pt = PT;
-  pt_byte = PT_BYTE;
-
-  if (!NILP (current_buffer->read_only))
-    return 0;
-
-  if (!NILP (current_buffer->mark_active)
-      && !NILP (Vtransient_mark_mode))
-    {
-      if (marker_position (current_buffer->mark) < PT)
-	{
-	  start = marker_position (current_buffer->mark);
-	  point = Fpoint ();
-	  end = PT;
-	}
-      else
-	{
-	  start = PT;
-	  point = Fpoint ();
-	  end = marker_position (current_buffer->mark);
-	}
-    }
-  else
-    {
-      if (NILP (Feobp ()))
-	Fforward_char (make_number (1));
-      Fforward_word (make_number (-1));
-      start = PT;
-      point = Fpoint ();
-      Fforward_word (make_number (1));
-      end = PT;
-    }
-  str = make_buffer_string (start, end, 1);
-  if (!NILP (Ftext_property_any (make_number (0),
-				 Flength (str),
-				 intern ("read-only"),
-				 Qt,
-				 str)))
-    {
-      SET_PT_BOTH (pt, pt_byte);
-      return FALSE;  /* Cannot signal here */
-    }
-#ifdef _UNICODE
-  uc_code = (WCHAR *) alloca ((SCHARS (str) + 1) * sizeof (WCHAR));
-  s = uc_code;
-  for (pos = start; pos < end; pos++)
-    *s++ = (WCHAR) FETCH_CHAR (CHAR_TO_BYTE (pos));
-  *s = (WCHAR) '\0';
-  len = (lstrlenW (uc_code) + 1) * sizeof (WCHAR);
-#else
-  str = Fdecode_coding_region (start, end, Vlocale_coding_system, Qt);
-  setup_coding_system (Fcheck_coding_system (Vlocale_coding_system),
-		     &coding);
-  coding.mode |= (CODING_MODE_SAFE_ENCODING | CODING_MODE_LAST_BLOCK);
-  coding.common_flags &= ~CODING_ANNOTATION_MASK;
-
-  coding.dst_bytes = SCHARS (str) * 2;
-  coding.destination = (unsigned char *) xmalloc (coding.dst_bytes + 1);
-  encode_coding_object (&coding, str, 0, 0, SCHARS (str), SBYTES (str), Qnil);
-
-  len = coding.produced + 1;
-  xfree (coding.destination);
-#endif
-  SET_PT_BOTH (pt, pt_byte);
-  
-  /* Return need size on reconverted string */
-  lResult = sizeof (RECONVERTSTRING) + len;
-  return lResult;
-}
-
-BOOL
-w32_get_ime_reconversion_string (hwnd, wParam, reconv)
-     HWND hwnd;
-     WPARAM wParam;
-     RECONVERTSTRING *reconv;
-{
-  HIMC hIMC;
-  int len, result, start, end;
-  Lisp_Object str, point;
-  struct w32_display_info *dpyinfo = &one_w32_display_info;
-  struct frame *f = x_window_to_frame (dpyinfo, hwnd);
-#ifdef _UNICODE
-  int pos;
-  WCHAR *uc_code, *s;
-#else
-  struct coding_system coding;
-#endif
-
-  if (!NILP (current_buffer->mark_active)
-      && !NILP (Vtransient_mark_mode))
-    {
-      if (marker_position (current_buffer->mark) < PT)
-	{
-	  start = marker_position (current_buffer->mark);
-	  point = Fpoint ();
-	  end = PT;
-	}
-      else
-	{
-	  start = PT;
-	  point = Fpoint ();
-	  end = marker_position (current_buffer->mark);
-	}
-    }
-  else
-    {
-      if (NILP (Feobp ()))
-	Fforward_char (make_number (1));
-      Fforward_word (make_number (-1));
-      start = PT;
-      point = Fpoint ();
-      Fforward_word (make_number (1));
-      end = PT;
-    }
-
-#ifdef _UNICODE
-  str = make_buffer_string (start, end, 0);
-  uc_code = (WCHAR *) alloca ((SCHARS (str) + 1) * sizeof (WCHAR));
-  s = uc_code;
-  for (pos = start; pos < end; pos++)
-    *s++ = (WCHAR) FETCH_CHAR (CHAR_TO_BYTE (pos));
-  *s = (WCHAR) '\0';
-  len = lstrlenW (uc_code) + 1;
-  Fgoto_char (point);
-  
-  hIMC = (ImmGetContextProc) (hwnd);
-  if (!hIMC)
-    {
-      return FALSE;
-    }
-
-  memcpy ((LPSTR) reconv + sizeof (RECONVERTSTRING),
-	  uc_code, len * sizeof (WCHAR));
-#else
-  str = Fdecode_coding_region (start, end, Vlocale_coding_system, Qt);
-  setup_coding_system (Fcheck_coding_system (Vlocale_coding_system),
-		     &coding);
-  coding.mode |= (CODING_MODE_SAFE_ENCODING | CODING_MODE_LAST_BLOCK);
-  coding.common_flags &= ~CODING_ANNOTATION_MASK;
-
-  coding.dst_bytes = SCHARS (str) * 2;
-  coding.destination = (unsigned char *) xmalloc (coding.dst_bytes + 1);
-  encode_coding_object (&coding, str, 0, 0, SCHARS (str), SBYTES (str), Qnil);
-  coding.destination[coding.produced] = '\0';
-  len = coding.produced;
-  Fgoto_char (point);
-  
-  hIMC = (ImmGetContextProc) (hwnd);
-  if (!hIMC)
-    {
-      xfree (coding.destination);
-      return FALSE;
-    }
-  strcpy ((LPSTR) reconv + sizeof (RECONVERTSTRING), coding.destination);
-  xfree (coding.destination);
-#endif
-  reconv->dwStrLen = len;
-  reconv->dwStrOffset = sizeof (RECONVERTSTRING);
-  reconv->dwCompStrLen = len;
-  reconv->dwCompStrOffset = 0;
-
-  /* Reconverted area is all of selected strings. */
-  reconv->dwTargetStrLen = len;
-  reconv->dwTargetStrOffset = 0;
-
-#if 0
-  /* Automatically adjust RECONVERTSTRING if not selected. */
-  if (NILP (current_buffer->mark_active))
-    (ImmSetCompositionStringProc) (hIMC,
-				   SCS_QUERYRECONVERTSTRING,
-				   (LPCVOID) reconv,
-				   reconv->dwSize,
-				   NULL, 0 );
-#endif
-  if ((ImmSetCompositionStringProc) (hIMC,
-				     SCS_SETRECONVERTSTRING,
-				     (LPCVOID) reconv,
-				     reconv->dwSize,
-				     NULL, 0))
-    {
-      /* Delete the selected area. */
-      del_range (start, end);
-      /* Set the position of candidate list dialog. */
-      w32_set_ime_conv_window (hwnd, f);
-      result = TRUE;
-    }
-  else
-    result = FALSE;
-
-  (ImmReleaseContextProc) (hwnd, hIMC);
-  return result;
-}
-#endif /* RECONVERSION */
-
-void
-w32_ime_control_init (void)
-{
-  HMODULE hImm32;
-  HMODULE hUser32;
-
-  hImm32 = GetModuleHandle ("IMM32.DLL");
-  if (!hImm32)
-    hImm32 = LoadLibrary ("IMM32.DLL");
-
-  fIME = FALSE;
-  Vime_control = Qnil;
-  IME_event_off_count = 0;
-
-  if (hImm32)
-    {
-      ImmGetOpenStatusProc =
-	(IMMGETOPENSTATUSPROC)
-	GetProcAddress (hImm32,
-			ImmGetOpenStatus_Name);
-      ImmSetOpenStatusProc =
-	(IMMSETOPENSTATUSPROC)
-	GetProcAddress (hImm32,
-			ImmSetOpenStatus_Name);
-      ImmSetCompositionWindowProc =
-	(IMMSETCOMPOSITIONWINDOWPROC)
-	GetProcAddress (hImm32,
-			ImmSetCompositionWindow_Name);
-      ImmGetContextProc =
-	(IMMGETCONTEXTPROC)
-	GetProcAddress (hImm32,
-			ImmGetContext_Name);
-      ImmGetConversionStatusProc =
-	(IMMGETCONVERSIONSTATUSPROC)
-	GetProcAddress (hImm32,
-			ImmGetConversionStatus_Name);
-      ImmSetConversionStatusProc =
-	(IMMSETCONVERSIONSTATUSPROC)
-	GetProcAddress (hImm32,
-			ImmSetConversionStatus_Name);
-      ImmNotifyIMEProc =
-	(IMMNOTIFYIMEPROC)
-	GetProcAddress (hImm32,
-			ImmNotifyIME_Name);
-      ImmReleaseContextProc =
-	(IMMRELEASECONTEXTPROC)
-	GetProcAddress (hImm32,
-			ImmReleaseContext_Name);
-      ImmCreateContextProc =
-	(IMMCREATECONTEXTPROC)
-	GetProcAddress (hImm32,
-			ImmCreateContext_Name);
-      ImmDestroyContextProc =
-	(IMMDESTROYCONTEXTPROC)
-	GetProcAddress (hImm32,
-			ImmDestroyContext_Name);
-      ImmAssociateContextProc =
-	(IMMASSOCIATECONTEXTPROC)
-	GetProcAddress (hImm32,
-			ImmAssociateContext_Name);
-      ImmGetHotKeyProc =
-	(IMMGETHOTKEYPROC)
-	GetProcAddress (hImm32,
-			ImmGetHotKey_Name);
-      ImmGetCompositionStringProc =
-	(IMMGETCOMPOSITIONSTRINGPROC)
-	GetProcAddress (hImm32, ImmGetCompositionString_Name);
-      ImmSetCompositionStringProc =
-	(IMMSETCOMPOSITIONSTRINGPROC)
-	GetProcAddress (hImm32, ImmSetCompositionString_Name);
-      ImmSetCompositionFontProc =
-	(IMMSETCOMPOSITIONFONTPROC)
-	GetProcAddress (hImm32, ImmSetCompositionFont_Name);
-      ImmGetConversionListProc =
-	(IMMGETCONVERSIONLISTPROC)
-	GetProcAddress (hImm32,
-			ImmGetConversionList_Name);
-      ImmConfigureIMEProc =
-	(IMMCONFIGUREIMEPROC)
-	GetProcAddress (hImm32,
-			ImmConfigureIME_Name);
-      ImmGetCandidateListProc =
-	(IMMGETCANDIDATELISTPROC)
-	GetProcAddress (hImm32,
-			ImmGetCandidateList_Name);
-      ImmGetCandidateListCountProc =
-	(IMMGETCANDIDATELISTCOUNTPROC)
-	GetProcAddress (hImm32,
-			ImmGetCandidateListCount_Name);
-      
-      if (ImmGetOpenStatusProc &&
-	  ImmSetOpenStatusProc &&
-	  ImmSetCompositionWindowProc &&
-	  ImmGetCompositionStringProc &&
-	  ImmSetCompositionStringProc &&
-	  ImmSetCompositionFontProc &&
-	  ImmGetContextProc &&
-	  ImmGetConversionStatusProc &&
-	  ImmSetConversionStatusProc &&
-	  ImmGetConversionListProc &&
-	  ImmConfigureIMEProc &&
-	  ImmNotifyIMEProc &&
-	  ImmReleaseContextProc &&
-	  ImmCreateContextProc &&
-	  ImmDestroyContextProc &&
-	  ImmAssociateContextProc &&
-	  ImmGetCandidateListProc &&
-	  ImmGetCandidateListCountProc &&
-	  ImmGetHotKeyProc)
-	{
-	  fIME = TRUE;
-	  Vime_control = Qt;
-	}
-    }
-}
-
-#ifdef HAVE_NTGUI
-static void
-w32_set_ime_font (hwnd, psetlf)
-     HWND hwnd;
-     LPLOGFONT psetlf;
-{
-  HIMC himc;
-  if (fIME && psetlf && !NILP (Vime_control))
-    {
-      himc = (ImmGetContextProc) (hwnd);
-      if (!himc)
-	return;
-      (ImmSetCompositionFontProc) (himc, psetlf);
-      (ImmReleaseContextProc) (hwnd, himc);
-    }
-}
-#endif  /* HAVE_NTGUI */
-
-/* From here, communication programs to make IME a conversion machine. */
-static HIMC
-immcontext (context)
-     Lisp_Object context;
-{
-  if (NUMBERP (context))
-    return agent[XFASTINT (context)].himc;
-  else
-    return ((((unsigned long) XCAR (context)) << 16) |
-	    (((unsigned long) XCDR (context)) & 0xffff));
-}
-
-static LRESULT CALLBACK
-conversion_agent_wndproc (HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
-/*     HWND hwnd;
-       UINT message;
-       WPARAM wparam;
-       LPARAM lparam; */
-{
-  HIMC himc, holdimc;
-
-  switch (message)
-    {
-    case WM_CREATE:
-      himc = (ImmCreateContextProc) ();
-      holdimc = (ImmAssociateContextProc) (hwnd, himc);
-      SetWindowLong (hwnd, 0, himc);
-      SetWindowLong (hwnd, 4, holdimc);
-      break;
-
-    case WM_DESTROY:
-      holdimc = GetWindowLong (hwnd, 4);
-      himc = (ImmAssociateContextProc) (hwnd, holdimc);
-      (ImmDestroyContextProc) (himc);
-      break;
-
-    case WM_MULE_IMM_SET_STATUS:
-      w32_set_ime_status (hwnd, (int) wparam);
-      break;
-
-    case WM_MULE_IMM_GET_STATUS:
-      return w32_get_ime_status (hwnd);
-
-    case WM_MULE_IMM_SET_MODE:
-      return w32_set_ime_mode (hwnd, (int) wparam, (int) lparam);
-
-    case WM_MULE_IMM_GET_COMPOSITION_STRING:
-      return w32_get_ime_composition_string (hwnd);
-
-    default:
-      return DefWindowProc (hwnd, message, wparam, lparam);
-    }
-  return 0;
-}
-
-static int
-initialize_conversion_agent ()
-{
-  int i;
-  WNDCLASS wc;
-
-  for (i = 0;i < MAX_CONVAGENT;i++)
-    {
-      agent[i].hwnd = 0;
-      agent[i].himc = 0;
-    }
-
-  wc.style	   = 0;
-  wc.lpfnWndProc   = conversion_agent_wndproc;
-  wc.cbClsExtra    = 0;
-  wc.cbWndExtra    = sizeof(long) * 2;
-  wc.hInstance     = hinst;
-  wc.hIcon	   = NULL;
-  wc.hCursor       = NULL;
-  wc.hbrBackground = NULL;
-  wc.lpszMenuName  = NULL;
-  wc.lpszClassName = CONVAGENT_CLASS;
-
-  if (!RegisterClass (&wc))
-    return 0;
-
-  return 1;
-}
-
-
-/*
-  Emacs Lisp function entries
-*/
-
-DEFUN ("ime-force-on", Fime_force_on, Sime_force_on, 0, 1, 0,
-       doc: /* Force status of IME open.  */)
-  (eventp)
-     Lisp_Object eventp;
-{
-  if (fIME && !NILP (Vime_control))
-    {
-      HIMC himc;
-      HWND hwnd;
-
-      if (!NILP (Fime_get_mode ()))
-	return Qnil;
-#ifdef HAVE_NTGUI
-      if (NILP (eventp))
-	IME_event_off_count++;
-      hwnd = FRAME_W32_WINDOW (SELECTED_FRAME ());
-#else
-      hwnd = hwndConsole;
-#endif
-      SendMessage (hwnd, WM_MULE_IMM_SET_STATUS, 1, 0);
-    }
-  return Qnil;
-}
-
-DEFUN ("ime-force-off", Fime_force_off, Sime_force_off, 0, 1, 0,
-       doc: /* Force status of IME close.  */)
-  (eventp)
-     Lisp_Object eventp;
-{
-  if (fIME && !NILP (Vime_control))
-    {
-      HIMC himc;
-      HWND hwnd;
-
-      if (NILP (Fime_get_mode ()))
-	return Qnil;
-#ifdef HAVE_NTGUI
-      if (NILP (eventp))
-	IME_event_off_count++;
-      hwnd = FRAME_W32_WINDOW (SELECTED_FRAME ());
-#else
-      hwnd = hwndConsole;
-#endif
-      SendMessage (hwnd, WM_MULE_IMM_SET_STATUS, 0, 0);
-    }
-  return Qnil;
-}
-
-DEFUN ("ime-get-mode", Fime_get_mode, Sime_get_mode, 0, 0, "",
-       doc: /* Get IME status.
-t means status of IME is open.  nil means it is close.  */)
-  ()
-{
-  if (fIME && !NILP (Vime_control))
-    {
-      HWND hwnd;
-      int result;
-
-#ifdef HAVE_NTGUI
-      hwnd = FRAME_W32_WINDOW (SELECTED_FRAME ());
-#else
-      hwnd = hwndConsole;
-#endif
-      result = SendMessage (hwnd, WM_MULE_IMM_GET_STATUS, 0, 0);
-
-      return result ? Qt : Qnil;
-    }
-  else
-    return Qnil;
-}
-
-DEFUN ("w32-set-ime-mode",
-       Fw32_set_ime_mode,
-       Sw32_set_ime_mode, 1, 2, 0,
-       doc: /* Set IME mode to MODE. If FRAME is omitted, the selected frame is used.  */)
-  (mode, frame)
-     Lisp_Object mode, frame;
-{
-  FRAME_PTR f;
-
-  if (NILP (frame))
-    {
-      f = SELECTED_FRAME ();
-    }
-  else
-    {
-      CHECK_FRAME (frame);
-      f = XFRAME (frame);
-    }
-  if (fIME && !NILP (Vime_control))
-    {
-      HWND hwnd;
-      int ret;
-      int newmode, mask;
-
-      newmode = 0;
-      mask = 0;
-
-      hwnd = FRAME_W32_WINDOW (f);
-
-      if (EQ (mode, intern ("katakana")))
-	{
-	  newmode |= IME_CMODE_KATAKANA;
-	  mask |= IME_CMODE_KATAKANA;
-	}
-      else if (EQ (mode, intern ("hiragana")))
-	{
-	  newmode &= ~IME_CMODE_KATAKANA;
-	  mask |= IME_CMODE_KATAKANA;
-	}
-      else if (EQ (mode, intern ("kanji")))
-	{
-	  newmode |= IME_CMODE_HANJACONVERT;
-	  mask |= IME_CMODE_HANJACONVERT;
-	}
-      else if (EQ (mode, intern ("nokanji")))
-	{
-	  newmode &= ~IME_CMODE_HANJACONVERT;
-	  mask |= IME_CMODE_HANJACONVERT;
-	}
-      else if (EQ (mode, intern ("code")))
-	{
-	  newmode |= IME_CMODE_CHARCODE;
-	  mask |= IME_CMODE_CHARCODE;
-	}
-      else if (EQ (mode, intern ("nocode")))
-	{
-	  newmode &= ~IME_CMODE_CHARCODE;
-	  mask |= IME_CMODE_CHARCODE;
-	}
-      else if (EQ (mode, intern ("non-convert")))
-	{
-	  newmode |= IME_CMODE_NOCONVERSION;
-	  mask |= IME_CMODE_NOCONVERSION;
-	}
-      else if (EQ (mode, intern ("convert")))
-	{
-	  newmode &= ~IME_CMODE_NOCONVERSION;
-	  mask |= IME_CMODE_NOCONVERSION;
-	}
-      else
-	error ("unknown mode!!");
-
-      ret = SendMessage (hwnd, WM_MULE_IMM_SET_MODE,
-			 (WPARAM) newmode, (LPARAM) mask);
-
-      if (!ret)
-	return Qnil;
-
-      return Qt;
-    }
-  return Qnil;
-}
-
-DEFUN ("w32-ime-register-word-dialog",
-       Fw32_ime_register_word_dialog,
-       Sw32_ime_register_word_dialog, 2, 2, 0,
-       doc: /* Open IME regist word dialog.  */)
-  (reading, word)
-     Lisp_Object reading, word;
-{
-  HKL hkl;
-  int reading_len, word_len;
-  REGISTERWORD regword;
-  Lisp_Object encoded_reading, encoded_word;
-
-  CHECK_STRING (reading);
-  CHECK_STRING (word);
-
-  if (fIME && !NILP (Vime_control) && ImmConfigureIMEProc)
-    {
-      hkl = GetKeyboardLayout (0);
-      encoded_reading = Fencode_coding_string (reading,
-					       Vlocale_coding_system,
-					       Qnil, Qnil);
-      reading_len = SBYTES (encoded_reading);
-      regword.lpReading = SDATA (encoded_reading);
-
-      encoded_word = Fencode_coding_string (word,
-					    Vlocale_coding_system,
-					    Qnil, Qnil);
-      word_len = SBYTES (encoded_word);
-      regword.lpWord = SDATA (encoded_word);
-      (ImmConfigureIMEProc) (hkl, FRAME_W32_WINDOW (SELECTED_FRAME ()),
-			    IME_CONFIG_REGISTERWORD, &regword);
-    }
-  return Qnil;
-}
-#endif /* USE_W32_IME */
-
-
-/***********************************************************************
                          w32 specialized functions
  ***********************************************************************/
 
@@ -8143,11 +7177,6 @@ Set this to nil to get the old behavior for repainting; this should
 only be necessary if the default setting causes problems.  */);
   w32_strict_painting = 1;
 
-#ifdef USE_W32_IME
-  DEFVAR_LISP ("ime-control", &Vime_control, "IME control flag");
-  Vime_control = Qnil;
-#endif
-
 #if 0 /* TODO: Port to W32 */
   defsubr (&Sx_change_window_property);
   defsubr (&Sx_delete_window_property);
@@ -8190,14 +7219,6 @@ only be necessary if the default setting causes problems.  */);
   defsubr (&Sw32_toggle_lock_key);
   defsubr (&Sw32_window_exists_p);
   defsubr (&Sw32_battery_status);
-
-#ifdef USE_W32_IME
-  defsubr (&Sw32_set_ime_mode);
-  defsubr (&Sw32_ime_register_word_dialog);
-  defsubr (&Sime_force_on);
-  defsubr (&Sime_force_off);
-  defsubr (&Sime_get_mode);
-#endif
 
   defsubr (&Sfile_system_info);
   defsubr (&Sdefault_printer_name);
@@ -8250,7 +7271,6 @@ globals_of_w32fns ()
   get_monitor_info_fn = (GetMonitorInfo_Proc)
     GetProcAddress (user32_lib, "GetMonitorInfoA");
 
-#ifndef USE_W32_IME
   {
     HMODULE imm32_lib = GetModuleHandle ("imm32.dll");
     get_composition_string_fn = (ImmGetCompositionString_Proc)
@@ -8258,8 +7278,6 @@ globals_of_w32fns ()
     get_ime_context_fn = (ImmGetContext_Proc)
       GetProcAddress (imm32_lib, "ImmGetContext");
   }
-#endif
-
   DEFVAR_INT ("w32-ansi-code-page",
 	      &w32_ansi_code_page,
 	      doc: /* The ANSI code page used by the system.  */);
@@ -8278,14 +7296,14 @@ w32_abort ()
 {
   int button;
   button = MessageBox (NULL,
-		       TEXT("A fatal error has occurred!\n\n"
-			    "Would you like to attach a debugger?\n\n"
-			    "Select YES to debug, NO to abort Emacs"
+		       "A fatal error has occurred!\n\n"
+		       "Would you like to attach a debugger?\n\n"
+		       "Select YES to debug, NO to abort Emacs"
 #if __GNUC__
-			    "\n\n(type \"gdb -p <emacs-PID>\" and\n"
-			    "\"continue\" inside GDB before clicking YES.)"
+		       "\n\n(type \"gdb -p <emacs-PID>\" and\n"
+		       "\"continue\" inside GDB before clicking YES.)"
 #endif
-			    ), TEXT("Emacs Abort Dialog"),
+		       , "Emacs Abort Dialog",
 		       MB_ICONEXCLAMATION | MB_TASKMODAL
 		       | MB_SETFOREGROUND | MB_YESNO);
   switch (button)

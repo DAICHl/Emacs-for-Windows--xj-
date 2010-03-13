@@ -190,13 +190,6 @@ static int window_scroll_preserve_vpos;
 static int inhibit_frame_unsplittable;
 #endif /* 0 */
 
-#ifdef USE_W32_IME
-Lisp_Object Vset_selected_window_buffer_functions;
-Lisp_Object Qset_selected_window_buffer_functions;
-Lisp_Object Vselect_window_functions;
-Lisp_Object Qselect_window_functions;
-#endif
-
 extern EMACS_INT scroll_margin;
 
 extern Lisp_Object Qwindow_scroll_functions, Vwindow_scroll_functions;
@@ -3564,19 +3557,6 @@ This function runs `window-scroll-functions' before running
     }
 
   set_window_buffer (window, buffer, 1, !NILP (keep_margins));
-
-#ifdef USE_W32_IME
-  if (! NILP (Vset_selected_window_buffer_functions))
-    {
-      Lisp_Object temp[4];
-      temp[0] = Qset_selected_window_buffer_functions;
-      temp[1] = tem;
-      temp[2] = window;
-      temp[3] = buffer;
-      Frun_hook_with_args (4, temp);
-    }
-#endif
-
   return Qnil;
 }
 
@@ -3599,9 +3579,6 @@ selected window before each command.  */)
   register struct window *w;
   register struct window *ow;
   struct frame *sf;
-#ifdef USE_W32_IME
-  Lisp_Object oldwin = selected_window;
-#endif
 
   CHECK_LIVE_WINDOW (window);
 
@@ -3669,12 +3646,6 @@ selected window before each command.  */)
   }
 
   windows_or_buffers_changed++;
-
-#ifdef USE_W32_IME
-  if (!NILP (Vselect_window_functions))
-     run_hook_with_args_2 (Qselect_window_functions, oldwin, window);
-#endif
-
   return window;
 }
 
@@ -7178,16 +7149,6 @@ syms_of_window ()
   staticpro (&Qwindow_configuration_change_hook);
   Qwindow_configuration_change_hook
     = intern ("window-configuration-change-hook");
-
-#ifdef USE_W32_IME
-  staticpro (&Qset_selected_window_buffer_functions);
-  Qset_selected_window_buffer_functions
-    = intern ("set-selected-window-buffer-functions");
-  
-  staticpro (&Qselect_window_functions);
-  Qselect_window_functions
-    = intern ("select-window-functions");
-#endif
 
   Qwindowp = intern ("windowp");
   staticpro (&Qwindowp);

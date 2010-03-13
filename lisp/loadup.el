@@ -197,7 +197,6 @@
       (load "term/w32-win")
       (load "ls-lisp")
       (load "disp-table")
-      (load "international/w32-ime")
       (load "dos-w32")
       (load "w32-fns")))
 (if (eq system-type 'ms-dos)
